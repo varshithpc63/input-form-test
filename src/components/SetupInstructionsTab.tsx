@@ -218,12 +218,28 @@ export const SetupInstructionsTab: React.FC<SetupInstructionsTabProps> = ({ publ
       <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
         <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <Server className="w-5 h-5 text-blue-600" />
-          <span>6. Local Execution & Deployment</span>
+          <span>6. Deploying to Vercel (1-Click Ready)</span>
         </h3>
 
         <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+          <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200 space-y-2">
+            <div className="font-bold text-emerald-900 text-sm flex items-center gap-1.5">
+              <span>🚀 Ready for Vercel Deployment</span>
+            </div>
+            <p className="text-emerald-800">
+              Your repository already includes <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-300">vercel.json</code> and <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-300">api/index.ts</code>. You can deploy directly via Git or the Vercel CLI:
+            </p>
+
+            <div className="bg-slate-900 p-3 rounded-lg text-emerald-300 font-mono text-[11px] space-y-1 mt-2">
+              <div># Option A: Deploy via Vercel CLI</div>
+              <div className="text-white font-bold">npm i -g vercel && vercel</div>
+              <div className="text-slate-400 mt-2"># Option B: Push to GitHub / GitLab</div>
+              <div className="text-slate-300">Import repository in vercel.com dashboard &rarr; Click Deploy (Default settings)</div>
+            </div>
+          </div>
+
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <div className="font-bold text-slate-800 mb-1">Development:</div>
+            <div className="font-bold text-slate-800 mb-1">Local Development:</div>
             <code className="font-mono bg-white px-2 py-1 rounded border border-slate-200 text-blue-600 block w-max">
               npm run dev
             </code>
@@ -235,10 +251,10 @@ export const SetupInstructionsTab: React.FC<SetupInstructionsTabProps> = ({ publ
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
             <div className="font-bold text-slate-800 mb-1">Production Build:</div>
             <code className="font-mono bg-white px-2 py-1 rounded border border-slate-200 text-blue-600 block w-max">
-              npm run build && npm run start
+              npm run build
             </code>
             <p className="mt-1.5 text-slate-500">
-              Compiles static assets into <code className="font-mono">dist/</code> and serves them via Express.
+              Compiles static assets into <code className="font-mono">dist/</code>.
             </p>
           </div>
         </div>

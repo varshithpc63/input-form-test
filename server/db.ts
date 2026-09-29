@@ -5,7 +5,10 @@ import type { OrderSubmission, DashboardStats } from '../src/types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../data');
+const isVercel = Boolean(process.env.VERCEL);
+const DATA_DIR = isVercel
+  ? path.join('/tmp', 'orderflow-data')
+  : path.resolve(__dirname, '../data');
 const DB_FILE = path.join(DATA_DIR, 'orders.json');
 
 // Memory cache + mutex queue to ensure atomic sequential operations
@@ -16,6 +19,16 @@ let writeQueue: Promise<void> = Promise.resolve();
 function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  // If running on Vercel and /tmp DB doesn't exist yet, seed from project data/orders.json
+  if (isVercel && !fs.existsSync(DB_FILE)) {
+    try {
+      const srcFile = path.resolve(__dirname, '../data/orders.json');
+      if (fs.existsSync(srcFile)) {
+        fs.copyFileSync(srcFile, DB_FILE);
+      }
+    } catch (_) {}
   }
 }
 
@@ -162,16 +175,26 @@ export function generateNextOrderId(): string {
 }
 
 export async function createOrder(data: {
+  id?: string;
   name: string;
   mobile: string;
   address: string;
+  notes?: string;
   ip?: string;
   sourceUrl?: string;
   userAgent?: string;
 }): Promise<OrderSubmission> {
   loadDatabase();
 
-  const id = generateNextOrderId();
+  let id = generateNextOrderId();
+  if (data.id && typeof data.id === 'string' && /^ORD-\d{8}-\d{6}$/i.test(data.id.trim())) {
+    const requestedId = data.id.trim().toUpperCase();
+    const existing = inMemoryOrders.find((o) => o.id === requestedId);
+    if (!existing) {
+      id = requestedId;
+    }
+  }
+
   const now = new Date().toISOString();
 
   const newOrder: OrderSubmission = {
@@ -182,6 +205,7 @@ export async function createOrder(data: {
     createdAt: now,
     createdAtFormatted: formatDateDisplay(now),
     status: 'new',
+    notes: data.notes || '',
     ip: data.ip,
     sourceUrl: data.sourceUrl,
     userAgent: data.userAgent,

@@ -6,6 +6,7 @@ import { OrderDetailModal } from './components/OrderDetailModal.tsx';
 import { FormBuilderTab } from './components/FormBuilderTab.tsx';
 import { LiveEmbedSimulator } from './components/LiveEmbedSimulator.tsx';
 import { SetupInstructionsTab } from './components/SetupInstructionsTab.tsx';
+import { ImportOrderModal } from './components/ImportOrderModal.tsx';
 import type { OrderSubmission, DashboardStats } from './types.ts';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderSubmission | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
@@ -110,12 +112,74 @@ export default function App() {
     }
   }, [searchQuery, statusFilter, sortBy, sortOrder, page, pageSize]);
 
+  // Sync any pending offline submissions from localStorage
+  const syncPendingOfflineOrders = useCallback(async () => {
+    try {
+      const raw = localStorage.getItem('orderflow_offline_orders');
+      if (!raw) return;
+      const orders = JSON.parse(raw);
+      if (!Array.isArray(orders) || orders.length === 0) return;
+
+      for (const ord of orders) {
+        await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: ord.name,
+            mobile: ord.mobile,
+            address: ord.address,
+            notes: ord.notes || 'Submitted via standalone HTML form',
+          }),
+        });
+      }
+
+      localStorage.removeItem('orderflow_offline_orders');
+      fetchSubmissions(true);
+      fetchStats();
+    } catch (e) {
+      console.warn('Sync pending offline orders error:', e);
+    }
+  }, [fetchSubmissions, fetchStats]);
+
   // Initial load
   useEffect(() => {
     fetchAppInfo();
     fetchStats();
     fetchSubmissions();
-  }, [fetchAppInfo, fetchStats, fetchSubmissions]);
+    syncPendingOfflineOrders();
+  }, [fetchAppInfo, fetchStats, fetchSubmissions, syncPendingOfflineOrders]);
+
+  // BroadcastChannel listener for instant cross-tab / standalone form sync
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('orderflow_orders_channel');
+
+    channel.onmessage = async (event) => {
+      if (event.data?.type === 'SYNC_OFFLINE_ORDER' && event.data.order) {
+        const ord = event.data.order;
+        try {
+          await fetch('/api/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: ord.name,
+              mobile: ord.mobile,
+              address: ord.address,
+              notes: ord.notes,
+            }),
+          });
+          fetchSubmissions(true);
+          fetchStats();
+        } catch (err) {
+          console.error('Failed to save broadcast order to backend:', err);
+        }
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, [fetchSubmissions, fetchStats]);
 
   // Live auto-refresh polling (every 8 seconds when enabled)
   useEffect(() => {
@@ -181,6 +245,7 @@ export default function App() {
         totalSubmissions={stats.total}
         publicUrl={publicUrl}
         isOnline={isOnline}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -254,6 +319,16 @@ export default function App() {
           onDelete={handleDeleteOrder}
         />
       )}
+
+      {/* Standalone Order Import / Sync Modal */}
+      <ImportOrderModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onOrderImported={() => {
+          fetchSubmissions(true);
+          fetchStats();
+        }}
+      />
     </div>
   );
 }

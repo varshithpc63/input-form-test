@@ -9,6 +9,7 @@ import {
   PlayCircle,
   BookOpen,
   ExternalLink,
+  DownloadCloud,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -17,6 +18,7 @@ interface HeaderProps {
   totalSubmissions: number;
   publicUrl: string;
   isOnline: boolean;
+  onOpenImportModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   totalSubmissions,
   publicUrl,
   isOnline,
+  onOpenImportModal,
 }) => {
   const [copiedUrl, setCopiedUrl] = React.useState(false);
 
@@ -61,8 +64,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Quick Endpoint Info Badge */}
+          {/* Quick Endpoint Info Badge & Sync Action */}
           <div className="flex items-center gap-2 text-xs">
+            {onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                title="Sync or import an order from standalone HTML"
+              >
+                <DownloadCloud className="w-3.5 h-3.5" />
+                <span>Import / Sync Order</span>
+              </button>
+            )}
+
             <div className="hidden lg:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 font-mono">
               <span className="text-slate-400">Target Endpoint:</span>
               <span className="text-blue-700 font-medium truncate max-w-xs">{publicUrl || 'Detecting...'}</span>
