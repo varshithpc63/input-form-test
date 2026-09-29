@@ -19,6 +19,9 @@ import {
   Eye,
   EyeOff,
   Zap,
+  Clock,
+  Server,
+  HelpCircle,
 } from 'lucide-react';
 import type { ApiKey } from '../types.ts';
 
@@ -165,7 +168,22 @@ export const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ publicUrl }) => {
     }
   };
 
+  const [cronSecret] = useState<string>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('orderflow_cron_secret') : null;
+    if (saved) return saved;
+    const generated = 'of_cron_' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+    if (typeof window !== 'undefined') localStorage.setItem('orderflow_cron_secret', generated);
+    return generated;
+  });
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
   const activeKeyToken = createdKey?.key || keys.find((k) => k.key)?.key || 'of_live_your_api_key_token_here';
+
+  const copyFieldValue = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   return (
     <div className="space-y-8">
@@ -241,7 +259,118 @@ export const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ publicUrl }) => {
         </div>
       )}
 
-      {/* Modal: Create API Key */}
+      {/* Sync App Configuration & Credentials Card */}
+      <div className="bg-white rounded-2xl border-2 border-indigo-200/80 shadow-md p-6 sm:p-7 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold">
+              <Server className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span>External App Sync Credentials</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                  DATABASE_URL & CRON_SECRET
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                When another application, sync worker, or scheduled cron job connects to sync this table, provide these values:
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Two-Column Credentials Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 1. DATABASE_URL */}
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                <Database className="w-3.5 h-3.5 text-blue-600" />
+                <span>DATABASE_URL</span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400">Order Data Source</span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              The public API URL where orders are queried and synchronized:
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${baseUrl}/api/sync/orders`}
+                className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold select-all"
+              />
+              <button
+                type="button"
+                onClick={() => copyFieldValue(`${baseUrl}/api/sync/orders`, 'DATABASE_URL')}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+              >
+                {copiedField === 'DATABASE_URL' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedField === 'DATABASE_URL' ? 'Copied!' : 'Copy'}</span>
+              </button>
+            </div>
+            <div className="text-[10px] text-slate-500">
+              💡 <em>Note: If your other app is a custom SQL worker saving orders into Postgres, set its destination Postgres connection string here.</em>
+            </div>
+          </div>
+
+          {/* 2. CRON_SECRET */}
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <span>CRON_SECRET</span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400">Scheduled Sync Token</span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Secret key used to authorize scheduled automated synchronization:
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={cronSecret}
+                className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold select-all"
+              />
+              <button
+                type="button"
+                onClick={() => copyFieldValue(cronSecret, 'CRON_SECRET')}
+                className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+              >
+                {copiedField === 'CRON_SECRET' ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedField === 'CRON_SECRET' ? 'Copied!' : 'Copy'}</span>
+              </button>
+            </div>
+            <div className="text-[10px] text-slate-500">
+              💡 <em>Pass via <code className="bg-white px-1 py-0.5 rounded border border-slate-200">Authorization: Bearer &lt;CRON_SECRET&gt;</code> to trigger sync.</em>
+            </div>
+          </div>
+        </div>
+
+        {/* Helper Explanation Banner */}
+        <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3.5 text-xs text-indigo-950 space-y-1.5">
+          <div className="font-bold flex items-center gap-1.5 text-indigo-900">
+            <HelpCircle className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>How does your other app use these details?</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px] text-indigo-900/90 leading-relaxed">
+            <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
+              <strong>Scenario A: If the app fetches data FROM OrderFlow:</strong>
+              <p className="mt-1 text-slate-600">
+                Set <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-indigo-700">DATABASE_URL</code> to <span className="font-mono font-semibold">{baseUrl}/api/sync/orders</span> and set <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-indigo-700">CRON_SECRET</code> to your API key or the secret above.
+              </p>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
+              <strong>Scenario B: If the app is a scheduled worker saving to SQL:</strong>
+              <p className="mt-1 text-slate-600">
+                Set <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-indigo-700">DATABASE_URL</code> to your own PostgreSQL/Supabase database URL, and set <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-indigo-700">CRON_SECRET</code> to secure its cron endpoint (<code className="font-mono">{baseUrl}/api/cron/sync</code>).
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
       {isCreating && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">

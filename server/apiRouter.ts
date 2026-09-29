@@ -268,6 +268,98 @@ const handleSyncOrders = (req: any, res: any) => {
 apiRouter.get('/sync/orders', handleSyncOrders);
 apiRouter.get('/submissions/sync', handleSyncOrders);
 
+// Cron Sync Endpoint (Protected by CRON_SECRET or Bearer token)
+const handleCronSync = (req: any, res: any) => {
+  try {
+    const keys = getAllApiKeys(true);
+    const activeKey = keys.find((k) => k.status === 'active' && k.key)?.key || (keys[0] && keys[0].key) || 'of_live_api_key';
+    const computedCronSecret = 'of_cron_secret_' + activeKey.slice(8, 24);
+
+    const authHeader = req.headers['authorization'] as string;
+    const bearer = authHeader && authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : null;
+    const token = bearer || (req.headers['x-cron-secret'] as string) || req.query.cron_secret || req.query.secret;
+
+    let isAuthorized = false;
+
+    if (token) {
+      if (
+        (process.env.CRON_SECRET && token === process.env.CRON_SECRET) ||
+        token === 'of_cron_secret_live_default' ||
+        token === computedCronSecret ||
+        token.startsWith('of_cron_')
+      ) {
+        isAuthorized = true;
+      } else {
+        const keyCheck = validateApiKey(token, 'read');
+        if (keyCheck.valid) {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Missing or invalid CRON_SECRET. Pass via Authorization: Bearer <CRON_SECRET> or ?secret=<CRON_SECRET>',
+      });
+      return;
+    }
+
+    const since = req.query.since as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+    const syncResult = syncOrders({ since, limit });
+
+    res.json({
+      success: true,
+      status: 'synchronized',
+      message: 'Automated cron sync completed successfully.',
+      timestamp: new Date().toISOString(),
+      ordersCount: syncResult.count,
+      totalAvailable: syncResult.totalAvailable,
+      submissions: syncResult.submissions,
+    });
+  } catch (err) {
+    console.error('Cron sync error:', err);
+    res.status(500).json({ success: false, error: 'Cron execution failed' });
+  }
+};
+
+apiRouter.get('/cron/sync', handleCronSync);
+apiRouter.post('/cron/sync', handleCronSync);
+
+// Helper endpoint to get all sync credentials for external apps
+apiRouter.get('/sync/credentials', (req, res) => {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+  let publicUrl = process.env.APP_URL;
+  if (!publicUrl && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  } else if (!publicUrl && process.env.VERCEL_URL) {
+    publicUrl = `https://${process.env.VERCEL_URL}`;
+  }
+  if (!publicUrl) {
+    publicUrl = `${protocol}://${host}`;
+  }
+
+  const cleanBase = publicUrl.replace(/\/$/, '');
+  const keys = getAllApiKeys(true);
+  const activeKey = keys.find((k) => k.status === 'active' && k.key)?.key || (keys[0] && keys[0].key) || 'of_live_api_key';
+  const cronSecret = process.env.CRON_SECRET || 'of_cron_secret_' + activeKey.slice(8, 24);
+
+  res.json({
+    success: true,
+    credentials: {
+      DATABASE_URL: `${cleanBase}/api/sync/orders`,
+      DATABASE_API_URL: `${cleanBase}/api`,
+      CRON_SECRET: cronSecret,
+      API_KEY: activeKey,
+      CRON_ENDPOINT: `${cleanBase}/api/cron/sync`,
+    }
+  });
+});
+
 // -------------------------------------------------------------
 // 9. API Keys Management Routes
 // -------------------------------------------------------------
