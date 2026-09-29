@@ -454,7 +454,7 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
       <div style="font-size: 0.78rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">
         📥 Sync with OrderFlow Dashboard
       </div>
-      <p style="margin: 0 0 0.5rem 0; font-size: 0.72rem; color: #64748b; line-height: 1.4;">
+      <p id="of-sync-reason" style="margin: 0 0 0.5rem 0; font-size: 0.72rem; color: #64748b; line-height: 1.4;">
         Submitted in Standalone Mode. To save this order to your OrderFlow database, copy the sync code below and click <strong>"Import / Sync"</strong> in your dashboard.
       </p>
       <button type="button" id="of-btn-copy-sync" style="width: 100%; padding: 0.45rem 0.75rem; font-size: 0.75rem; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
@@ -608,14 +608,24 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
       var candidates = getCandidateEndpoints();
       var succeeded = false;
       var lastError = '';
+      var failedReason = '';
 
       if (candidates.length > 0) {
         for (var i = 0; i < candidates.length; i++) {
           var candidateUrl = candidates[i];
+
+          // Check for mixed-content violation (HTTP endpoint from HTTPS site like Odoo)
+          if (window.location && window.location.protocol === 'https:' && candidateUrl.indexOf('http://') === 0) {
+            console.warn('[OrderFlow] Mixed Content Warning: Cannot call HTTP endpoint from HTTPS site (' + candidateUrl + '). Use your HTTPS Vercel endpoint.');
+            failedReason = 'Mixed Content: Target URL is HTTP (' + candidateUrl + ') on an HTTPS website. Please use your HTTPS Vercel URL.';
+            continue;
+          }
+
+          // Attempt 1: Modern CORS Fetch
           try {
             var response = await fetch(candidateUrl, {
               method: 'POST',
-              credentials: 'include',
+              mode: 'cors',
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
@@ -634,12 +644,42 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
               break;
             } else {
               lastError = data.error || 'Failed to place order. Please review your input.';
-              succeeded = false;
-              break;
             }
           } catch (networkErr) {
-            console.warn('[OrderFlow] Endpoint attempt failed:', candidateUrl, networkErr);
-            lastError = 'NETWORK_ERROR';
+            console.warn('[OrderFlow] Fetch attempt failed on:', candidateUrl, networkErr);
+            failedReason = 'Could not reach ' + candidateUrl + ' (Network/CORS error).';
+
+            // Attempt 2: XMLHttpRequest Fallback
+            try {
+              var xhrData = await new Promise(function(resolve, reject) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', candidateUrl, true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.timeout = 7000;
+                xhr.onload = function() {
+                  if (xhr.status >= 200 && xhr.status < 300) {
+                    try { resolve(JSON.parse(xhr.responseText)); } catch(e) { reject(e); }
+                  } else {
+                    reject(new Error('Status ' + xhr.status));
+                  }
+                };
+                xhr.onerror = function() { reject(new Error('XHR Network Error')); };
+                xhr.ontimeout = function() { reject(new Error('Timeout')); };
+                xhr.send(JSON.stringify(payload));
+              });
+
+              if (xhrData && xhrData.success) {
+                resultOrderId.textContent = xhrData.orderId;
+                if (syncNotice) syncNotice.style.display = 'none';
+                formSection.style.display = 'none';
+                successSection.style.display = 'block';
+                succeeded = true;
+                break;
+              }
+            } catch (xhrErr) {
+              console.warn('[OrderFlow] XHR fallback failed:', xhrErr);
+            }
           }
         }
       }
@@ -685,7 +725,13 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
 
         // Display success state with the generated Order ID
         resultOrderId.textContent = generatedId;
-        if (syncNotice) syncNotice.style.display = 'block';
+        if (syncNotice) {
+          syncNotice.style.display = 'block';
+          var reasonEl = document.getElementById('of-sync-reason');
+          if (reasonEl && failedReason) {
+            reasonEl.innerHTML = '<strong>Network Notice:</strong> ' + failedReason + '<br><span style="color:#475569;">Order assigned ID <strong>' + generatedId + '</strong> in Standalone Mode. Copy the sync code below to import into your dashboard, or update your HTML code with your public HTTPS Vercel URL.</span>';
+          }
+        }
         formSection.style.display = 'none';
         successSection.style.display = 'block';
         setLoading(false);

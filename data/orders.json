@@ -1,5 +1,18 @@
 [
   {
+    "id": "ORD-20260929-561711",
+    "name": "Customer (Odoo Website)",
+    "mobile": "+1 555-0182",
+    "address": "Submitted via Odoo Website Embed Block (Lainar Bren)",
+    "createdAt": "2026-09-29T13:17:06.410Z",
+    "createdAtFormatted": "Sep 29, 2026, 01:17:06 PM",
+    "status": "new",
+    "notes": "Odoo website embed order",
+    "ip": "127.0.0.1",
+    "sourceUrl": "direct-embed",
+    "userAgent": "curl/7.88.1"
+  },
+  {
     "id": "ORD-20260929-400969",
     "name": "Vercel Deploy Test",
     "mobile": "+1 555-900-1122",

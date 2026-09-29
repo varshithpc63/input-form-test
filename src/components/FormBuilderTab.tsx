@@ -12,6 +12,8 @@ import {
   ExternalLink,
   ShieldCheck,
   CheckCircle2,
+  AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import type { FormConfig } from '../types.ts';
 import { DEFAULT_FORM_CONFIG, generateEmbedHtml } from '../utils/formGenerator.ts';
@@ -235,25 +237,14 @@ ${generatedHtml}
             <div className="grid grid-cols-3 gap-1.5 text-xs">
               <button
                 type="button"
-                onClick={() => setConfig({ ...config, apiUrl: `${publicBaseUrl.replace(/\/$/, '')}/api/submissions` })}
-                className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
-                  (config.apiUrl || effectiveApiUrl) === `${publicBaseUrl.replace(/\/$/, '')}/api/submissions`
-                    ? 'border-blue-500 bg-blue-50/70 text-blue-700 font-semibold'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="font-bold text-[11px] truncate">☁️ Current App</div>
-                <div className="text-[10px] text-slate-400">Current host</div>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => {
                   const current = config.apiUrl || '';
                   if (current.includes('vercel.app')) {
                     setConfig({ ...config, apiUrl: current });
                   } else {
-                    const promptVal = prompt('Enter your Vercel App Domain (e.g. my-app.vercel.app or https://my-app.vercel.app):');
+                    const promptVal = prompt(
+                      'Enter your Vercel App Domain (e.g. your-project.vercel.app):'
+                    );
                     if (promptVal) {
                       const clean = promptVal.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
                       setConfig({ ...config, apiUrl: `https://${clean}/api/submissions` });
@@ -263,11 +254,24 @@ ${generatedHtml}
                 className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                   (config.apiUrl || '').includes('vercel.app')
                     ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold ring-1 ring-emerald-500'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="font-bold text-[11px] text-emerald-700 truncate">▲ Vercel URL</div>
-                <div className="text-[10px] text-slate-400">Set Vercel domain</div>
+                <div className="text-[10px] text-slate-400">For Odoo & Live Sites</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, apiUrl: `${publicBaseUrl.replace(/\/$/, '')}/api/submissions` })}
+                className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  (config.apiUrl || effectiveApiUrl) === `${publicBaseUrl.replace(/\/$/, '')}/api/submissions` && !(config.apiUrl || '').includes('vercel.app')
+                    ? 'border-blue-500 bg-blue-50/70 text-blue-700 font-semibold'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-bold text-[11px] truncate">☁️ Current App</div>
+                <div className="text-[10px] text-slate-400">Preview Host</div>
               </button>
 
               <button
@@ -280,9 +284,35 @@ ${generatedHtml}
                 }`}
               >
                 <div className="font-bold text-[11px] truncate">🖥️ Localhost</div>
-                <div className="text-[10px] text-slate-400">Port 3000</div>
+                <div className="text-[10px] text-slate-400">PC testing only</div>
               </button>
             </div>
+
+            {/* Warning if localhost is selected */}
+            {(config.apiUrl || effectiveApiUrl).includes('localhost') && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 animate-in fade-in duration-150">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-[11px]">Important for Odoo / Live Websites:</div>
+                  <div className="text-[11px] leading-relaxed text-amber-800">
+                    You have <code className="bg-white/80 px-1 py-0.5 rounded font-mono border border-amber-300">localhost:3000</code> selected. Localhost only works on your personal computer. Live HTTPS websites (like your Odoo site) cannot connect to localhost.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const promptVal = prompt('Enter your Vercel App Domain (e.g. your-project.vercel.app):');
+                      if (promptVal) {
+                        const clean = promptVal.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+                        setConfig({ ...config, apiUrl: `https://${clean}/api/submissions` });
+                      }
+                    }}
+                    className="text-[11px] font-bold text-amber-900 underline hover:text-amber-950 mt-1 cursor-pointer block"
+                  >
+                    &rarr; Switch to Vercel HTTPS URL for Odoo
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Custom Input & Test Connection Button */}
             <div className="space-y-1.5">
@@ -291,7 +321,7 @@ ${generatedHtml}
                   type="text"
                   value={config.apiUrl || effectiveApiUrl}
                   onChange={(e) => setConfig({ ...config, apiUrl: e.target.value })}
-                  placeholder="https://your-domain.com/api/submissions"
+                  placeholder="https://your-app.vercel.app/api/submissions"
                   className="flex-1 px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
@@ -306,7 +336,7 @@ ${generatedHtml}
                         alert(`⚠️ Endpoint responded with status: ${res.status}\nURL: ${testUrl}`);
                       }
                     } catch (e: any) {
-                      alert(`❌ Connection Error (Failed to fetch)\n\nCould not reach: ${testUrl}\n\nTroubleshooting tips:\n1. If testing index.html locally, click "Localhost (Port 3000)" and ensure "npm run dev" is running.\n2. In Cloud environments, dev URLs may require login. Deploying the app provides a permanent public URL.`);
+                      alert(`❌ Connection Error (Failed to fetch)\n\nCould not reach: ${testUrl}\n\nTroubleshooting tips:\n1. If testing index.html locally on PC, choose "Localhost (Port 3000)".\n2. If embedding in Odoo, Shopify, or WordPress, click "Vercel URL" and enter your public https://*.vercel.app domain.`);
                     }
                   }}
                   className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition-colors"
