@@ -232,31 +232,55 @@ ${generatedHtml}
             </div>
 
             {/* Quick Presets */}
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setConfig({ ...config, apiUrl: 'http://localhost:3000/api/submissions' })}
-                className={`px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
-                  (config.apiUrl || effectiveApiUrl) === 'http://localhost:3000/api/submissions'
-                    ? 'border-blue-500 bg-blue-50/70 text-blue-700 font-semibold'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="font-bold text-[11px]">🖥️ Localhost (Port 3000)</div>
-                <div className="text-[10px] text-slate-400">For testing HTML locally</div>
-              </button>
-
+            <div className="grid grid-cols-3 gap-1.5 text-xs">
               <button
                 type="button"
                 onClick={() => setConfig({ ...config, apiUrl: `${publicBaseUrl.replace(/\/$/, '')}/api/submissions` })}
-                className={`px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                   (config.apiUrl || effectiveApiUrl) === `${publicBaseUrl.replace(/\/$/, '')}/api/submissions`
                     ? 'border-blue-500 bg-blue-50/70 text-blue-700 font-semibold'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <div className="font-bold text-[11px]">☁️ Current App URL</div>
-                <div className="text-[10px] text-slate-400">Connected backend host</div>
+                <div className="font-bold text-[11px] truncate">☁️ Current App</div>
+                <div className="text-[10px] text-slate-400">Current host</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const current = config.apiUrl || '';
+                  if (current.includes('vercel.app')) {
+                    setConfig({ ...config, apiUrl: current });
+                  } else {
+                    const promptVal = prompt('Enter your Vercel App Domain (e.g. my-app.vercel.app or https://my-app.vercel.app):');
+                    if (promptVal) {
+                      const clean = promptVal.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+                      setConfig({ ...config, apiUrl: `https://${clean}/api/submissions` });
+                    }
+                  }
+                }}
+                className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  (config.apiUrl || '').includes('vercel.app')
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold ring-1 ring-emerald-500'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-bold text-[11px] text-emerald-700 truncate">▲ Vercel URL</div>
+                <div className="text-[10px] text-slate-400">Set Vercel domain</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, apiUrl: 'http://localhost:3000/api/submissions' })}
+                className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  (config.apiUrl || effectiveApiUrl) === 'http://localhost:3000/api/submissions'
+                    ? 'border-blue-500 bg-blue-50/70 text-blue-700 font-semibold'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-bold text-[11px] truncate">🖥️ Localhost</div>
+                <div className="text-[10px] text-slate-400">Port 3000</div>
               </button>
             </div>
 

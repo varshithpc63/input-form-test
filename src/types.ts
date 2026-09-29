@@ -47,3 +47,24 @@ export interface GetSubmissionsResponse {
   pageSize: number;
   totalPages: number;
 }
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key?: string;
+  keyPrefix: string;
+  role: 'read' | 'read_write' | 'admin';
+  createdAt: string;
+  createdAtFormatted: string;
+  lastUsedAt?: string | null;
+  status: 'active' | 'revoked';
+}
+
+export interface SyncOrdersResponse {
+  success: boolean;
+  submissions: OrderSubmission[];
+  count: number;
+  totalAvailable: number;
+  lastSyncTimestamp: string;
+  hasMore: boolean;
+}

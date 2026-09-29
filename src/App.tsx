@@ -7,10 +7,11 @@ import { FormBuilderTab } from './components/FormBuilderTab.tsx';
 import { LiveEmbedSimulator } from './components/LiveEmbedSimulator.tsx';
 import { SetupInstructionsTab } from './components/SetupInstructionsTab.tsx';
 import { ImportOrderModal } from './components/ImportOrderModal.tsx';
+import { ApiKeysTab } from './components/ApiKeysTab.tsx';
 import type { OrderSubmission, DashboardStats } from './types.ts';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'submissions' | 'builder' | 'preview' | 'docs'>('submissions');
+  const [activeTab, setActiveTab] = useState<'submissions' | 'builder' | 'preview' | 'docs' | 'api'>('submissions');
   const [submissions, setSubmissions] = useState<OrderSubmission[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -308,6 +309,9 @@ export default function App() {
 
         {/* Tab 4: Setup & Architecture Documentation */}
         {activeTab === 'docs' && <SetupInstructionsTab publicUrl={publicUrl} />}
+
+        {/* Tab 5: API Keys & External Sync Engine */}
+        {activeTab === 'api' && <ApiKeysTab publicUrl={publicUrl} />}
       </main>
 
       {/* Order Detail Modal */}

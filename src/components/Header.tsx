@@ -10,11 +10,12 @@ import {
   BookOpen,
   ExternalLink,
   DownloadCloud,
+  Key,
 } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'submissions' | 'builder' | 'preview' | 'docs';
-  setActiveTab: (tab: 'submissions' | 'builder' | 'preview' | 'docs') => void;
+  activeTab: 'submissions' | 'builder' | 'preview' | 'docs' | 'api';
+  setActiveTab: (tab: 'submissions' | 'builder' | 'preview' | 'docs' | 'api') => void;
   totalSubmissions: number;
   publicUrl: string;
   isOnline: boolean;
@@ -139,6 +140,21 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Live Embed Tester</span>
             <span className="hidden sm:inline-block px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">
               Interactive
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('api')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium text-sm transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'api'
+                ? 'border-indigo-600 text-indigo-600 bg-indigo-50/40 rounded-t-lg'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+            }`}
+          >
+            <Key className="w-4 h-4 text-indigo-600" />
+            <span>API Keys & Sync</span>
+            <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded">
+              New
             </span>
           </button>
 

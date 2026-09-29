@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import type { OrderSubmission, DashboardStats } from '../src/types.ts';
+import type { OrderSubmission, DashboardStats, ApiKey } from '../src/types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,11 +11,15 @@ const DATA_DIR = isVercel
   ? path.join('/tmp', 'orderflow-data')
   : path.resolve(__dirname, '../data');
 const DB_FILE = path.join(DATA_DIR, 'orders.json');
+const KEYS_FILE = path.join(DATA_DIR, 'api_keys.json');
 
 // Memory cache + mutex queue to ensure atomic sequential operations
 let inMemoryOrders: OrderSubmission[] = [];
+let inMemoryKeys: ApiKey[] = [];
 let isInitialized = false;
+let isKeysInitialized = false;
 let writeQueue: Promise<void> = Promise.resolve();
+let keysWriteQueue: Promise<void> = Promise.resolve();
 
 function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) {
@@ -379,3 +384,232 @@ export function exportOrdersCsv(): string {
 
   return [headers.join(','), ...rows].join('\n');
 }
+
+// -------------------------------------------------------------
+// API Keys & Sync Engine
+// -------------------------------------------------------------
+
+function seedDefaultKeys(): ApiKey[] {
+  const now = new Date().toISOString();
+  // Create an initial default primary sync key
+  const defaultToken = 'of_live_' + crypto.randomBytes(24).toString('hex');
+  return [
+    {
+      id: 'key_' + crypto.randomBytes(8).toString('hex'),
+      name: 'Default Sync Key (Zapier, Webhooks & External Apps)',
+      key: defaultToken,
+      keyPrefix: defaultToken.slice(0, 16) + '...',
+      role: 'read_write',
+      createdAt: now,
+      createdAtFormatted: formatDateDisplay(now),
+      lastUsedAt: null,
+      status: 'active',
+    },
+  ];
+}
+
+function loadKeysDatabase(): void {
+  if (isKeysInitialized) return;
+  ensureDataDir();
+
+  if (fs.existsSync(KEYS_FILE)) {
+    try {
+      const raw = fs.readFileSync(KEYS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        inMemoryKeys = parsed;
+        isKeysInitialized = true;
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to parse keys file, re-initializing with seed:', err);
+    }
+  }
+
+  // Seed default key
+  inMemoryKeys = seedDefaultKeys();
+  saveKeysDatabaseSync();
+  isKeysInitialized = true;
+}
+
+function saveKeysDatabaseSync(): void {
+  ensureDataDir();
+  const tmpFile = `${KEYS_FILE}.tmp.${Date.now()}`;
+  const data = JSON.stringify(inMemoryKeys, null, 2);
+  fs.writeFileSync(tmpFile, data, 'utf-8');
+  fs.renameSync(tmpFile, KEYS_FILE);
+}
+
+function queueKeysWrite(): Promise<void> {
+  keysWriteQueue = keysWriteQueue
+    .then(async () => {
+      saveKeysDatabaseSync();
+    })
+    .catch((err) => {
+      console.error('Keys database write error:', err);
+    });
+  return keysWriteQueue;
+}
+
+/**
+ * Create a new API key with specific role/scopes
+ */
+export async function createApiKey(
+  name: string,
+  role: 'read' | 'read_write' | 'admin' = 'read_write'
+): Promise<ApiKey> {
+  loadKeysDatabase();
+
+  const token = 'of_live_' + crypto.randomBytes(24).toString('hex');
+  const now = new Date().toISOString();
+  const id = 'key_' + crypto.randomBytes(8).toString('hex');
+
+  const newKey: ApiKey = {
+    id,
+    name: (name || 'API Sync Key').trim(),
+    key: token,
+    keyPrefix: token.slice(0, 16) + '...',
+    role,
+    createdAt: now,
+    createdAtFormatted: formatDateDisplay(now),
+    lastUsedAt: null,
+    status: 'active',
+  };
+
+  inMemoryKeys.unshift(newKey);
+  await queueKeysWrite();
+
+  return newKey;
+}
+
+/**
+ * Return all API keys. By default, masks the full token except for newly created keys.
+ */
+export function getAllApiKeys(revealKeys = false): ApiKey[] {
+  loadKeysDatabase();
+  return inMemoryKeys.map((k) => ({
+    id: k.id,
+    name: k.name,
+    key: revealKeys ? k.key : undefined,
+    keyPrefix: k.key ? `${k.key.slice(0, 14)}...` : k.keyPrefix,
+    role: k.role,
+    createdAt: k.createdAt,
+    createdAtFormatted: k.createdAtFormatted,
+    lastUsedAt: k.lastUsedAt,
+    status: k.status,
+  }));
+}
+
+/**
+ * Validate an incoming API key token against active keys.
+ * Also records lastUsedAt timestamp.
+ */
+export function validateApiKey(
+  rawKey: string,
+  requiredRole?: 'read' | 'read_write' | 'admin'
+): { valid: boolean; key?: ApiKey; error?: string } {
+  loadKeysDatabase();
+
+  if (!rawKey || typeof rawKey !== 'string') {
+    return { valid: false, error: 'API key is required in Authorization or x-api-key header.' };
+  }
+
+  const cleanKey = rawKey.trim().replace(/^Bearer\s+/i, '');
+  const matched = inMemoryKeys.find((k) => k.key === cleanKey);
+
+  if (!matched) {
+    return { valid: false, error: 'Invalid or unknown API key.' };
+  }
+
+  if (matched.status !== 'active') {
+    return { valid: false, error: 'This API key has been revoked.' };
+  }
+
+  // Check role authorization
+  if (requiredRole === 'admin' && matched.role !== 'admin') {
+    return { valid: false, error: 'Insufficient permissions. Requires admin role.' };
+  }
+  if (requiredRole === 'read_write' && matched.role === 'read') {
+    return { valid: false, error: 'Insufficient permissions. Requires read_write role.' };
+  }
+
+  // Update lastUsedAt asynchronously
+  matched.lastUsedAt = new Date().toISOString();
+  queueKeysWrite();
+
+  return { valid: true, key: matched };
+}
+
+/**
+ * Revoke an API key so it can no longer be used
+ */
+export async function revokeApiKey(id: string): Promise<boolean> {
+  loadKeysDatabase();
+  const key = inMemoryKeys.find((k) => k.id === id);
+  if (!key) return false;
+  key.status = 'revoked';
+  await queueKeysWrite();
+  return true;
+}
+
+/**
+ * Delete an API key permanently
+ */
+export async function deleteApiKey(id: string): Promise<boolean> {
+  loadKeysDatabase();
+  const initialLength = inMemoryKeys.length;
+  inMemoryKeys = inMemoryKeys.filter((k) => k.id !== id);
+  if (inMemoryKeys.length !== initialLength) {
+    await queueKeysWrite();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Optimized Sync API for external applications:
+ * Allows incremental delta syncing via `since` ISO timestamp or cursor.
+ */
+export function syncOrders(params: {
+  since?: string;
+  limit?: number;
+  status?: string;
+}): {
+  submissions: OrderSubmission[];
+  count: number;
+  totalAvailable: number;
+  lastSyncTimestamp: string;
+  hasMore: boolean;
+} {
+  loadDatabase();
+
+  const limit = Math.min(Math.max(params.limit || 50, 1), 500);
+  let filtered = [...inMemoryOrders];
+
+  // Incremental sync filter: orders created or modified after `since`
+  if (params.since) {
+    const sinceTime = new Date(params.since).getTime();
+    if (!isNaN(sinceTime)) {
+      filtered = filtered.filter((o) => new Date(o.createdAt).getTime() > sinceTime);
+    }
+  }
+
+  if (params.status && params.status !== 'all') {
+    filtered = filtered.filter((o) => o.status === params.status);
+  }
+
+  // Sort chronological for sync or newest first
+  filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const sliced = filtered.slice(0, limit);
+  const now = new Date().toISOString();
+
+  return {
+    submissions: sliced,
+    count: sliced.length,
+    totalAvailable: filtered.length,
+    lastSyncTimestamp: now,
+    hasMore: filtered.length > limit,
+  };
+}
+

@@ -7,9 +7,30 @@ import {
   deleteOrder,
   getStats,
   exportOrdersCsv,
+  createApiKey,
+  getAllApiKeys,
+  validateApiKey,
+  revokeApiKey,
+  deleteApiKey,
+  syncOrders,
 } from './db.ts';
 
 export const apiRouter = Router();
+
+function extractApiKey(req: any): string | null {
+  const authHeader = req.headers['authorization'] as string;
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  const xApiKey = req.headers['x-api-key'] as string;
+  if (xApiKey) {
+    return xApiKey.trim();
+  }
+  if (req.query.api_key && typeof req.query.api_key === 'string') {
+    return req.query.api_key.trim();
+  }
+  return null;
+}
 
 // App & Environment Info
 apiRouter.get('/app-info', (req, res) => {
@@ -206,5 +227,141 @@ apiRouter.delete('/submissions/:id', async (req, res) => {
   } catch (err) {
     console.error('Error deleting order:', err);
     res.status(500).json({ success: false, error: 'Failed to delete order' });
+  }
+});
+
+// -------------------------------------------------------------
+// 8. Sync Orders API (For external apps, Google Sheets, CRMs, Zapier)
+// -------------------------------------------------------------
+const handleSyncOrders = (req: any, res: any) => {
+  try {
+    const rawKey = extractApiKey(req);
+
+    // If an API key is provided, validate it
+    if (rawKey) {
+      const validation = validateApiKey(rawKey, 'read');
+      if (!validation.valid) {
+        res.status(401).json({
+          success: false,
+          error: validation.error || 'Unauthorized. Valid API key required.',
+        });
+        return;
+      }
+    }
+
+    const since = req.query.since as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const status = (req.query.status as string) || 'all';
+
+    const result = syncOrders({ since, limit, status });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    console.error('Sync error:', err);
+    res.status(500).json({ success: false, error: 'Failed to execute sync operation' });
+  }
+};
+
+apiRouter.get('/sync/orders', handleSyncOrders);
+apiRouter.get('/submissions/sync', handleSyncOrders);
+
+// -------------------------------------------------------------
+// 9. API Keys Management Routes
+// -------------------------------------------------------------
+
+// List all API keys
+apiRouter.get('/keys', (req, res) => {
+  try {
+    const reveal = req.query.reveal === 'true';
+    const keys = getAllApiKeys(reveal);
+    res.json({ success: true, keys });
+  } catch (err) {
+    console.error('Error fetching API keys:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch API keys' });
+  }
+});
+
+// Create a new API key
+apiRouter.post('/keys', async (req, res) => {
+  try {
+    const { name, role } = req.body;
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ success: false, error: 'Key name / description is required.' });
+      return;
+    }
+
+    const validRoles = ['read', 'read_write', 'admin'];
+    const assignedRole = validRoles.includes(role) ? role : 'read_write';
+
+    const newKey = await createApiKey(name.trim(), assignedRole);
+
+    res.status(201).json({
+      success: true,
+      message: 'API key created successfully. Save your key token now; it will be masked later.',
+      key: newKey,
+    });
+  } catch (err) {
+    console.error('Error creating API key:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate API key' });
+  }
+});
+
+// Verify / Test an API key
+apiRouter.get('/keys/verify', (req, res) => {
+  const rawKey = extractApiKey(req);
+  if (!rawKey) {
+    res.status(400).json({ success: false, error: 'Please supply a key in Authorization: Bearer <key> or x-api-key header' });
+    return;
+  }
+
+  const result = validateApiKey(rawKey);
+  if (!result.valid) {
+    res.status(401).json({ success: false, error: result.error });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'API Key is active and authorized!',
+    key: {
+      id: result.key?.id,
+      name: result.key?.name,
+      role: result.key?.role,
+      status: result.key?.status,
+      lastUsedAt: result.key?.lastUsedAt,
+    },
+  });
+});
+
+// Revoke an API key
+apiRouter.patch('/keys/:id/revoke', async (req, res) => {
+  try {
+    const success = await revokeApiKey(req.params.id);
+    if (!success) {
+      res.status(404).json({ success: false, error: 'API key not found' });
+      return;
+    }
+    res.json({ success: true, message: 'API key successfully revoked' });
+  } catch (err) {
+    console.error('Error revoking API key:', err);
+    res.status(500).json({ success: false, error: 'Failed to revoke API key' });
+  }
+});
+
+// Delete an API key
+apiRouter.delete('/keys/:id', async (req, res) => {
+  try {
+    const success = await deleteApiKey(req.params.id);
+    if (!success) {
+      res.status(404).json({ success: false, error: 'API key not found' });
+      return;
+    }
+    res.json({ success: true, message: 'API key successfully deleted' });
+  } catch (err) {
+    console.error('Error deleting API key:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete API key' });
   }
 });
