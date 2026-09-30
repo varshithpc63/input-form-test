@@ -64,6 +64,7 @@ export const FormBuilderTab: React.FC<FormBuilderTabProps> = ({
   };
 
   const handleDownloadHtml = () => {
+    const freshHtml = generateEmbedHtml(config, publicBaseUrl);
     const fullHtmlDoc = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -72,7 +73,7 @@ export const FormBuilderTab: React.FC<FormBuilderTabProps> = ({
   <title>${config.title}</title>
 </head>
 <body style="margin: 0; padding: 2rem 1rem; background-color: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-${generatedHtml}
+${freshHtml}
 </body>
 </html>`;
 

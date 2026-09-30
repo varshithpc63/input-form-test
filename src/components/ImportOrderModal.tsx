@@ -55,14 +55,18 @@ export const ImportOrderModal: React.FC<ImportOrderModalProps> = ({
       } else {
         // If user pasted just an Order ID or raw text
         const orderIdMatch = code.match(/ORD-\d{8}-\d{6}/i);
-        const orderId = orderIdMatch ? orderIdMatch[0].toUpperCase() : 'ORD-20260929-400967';
-        payload = {
-          id: orderId,
-          name: 'Direct Customer Order',
-          mobile: '+1 555-0199',
-          address: 'Customer Address (Submitted via Standalone Form)',
-          notes: `Imported standalone order (${orderId})`,
-        };
+        if (orderIdMatch) {
+          const orderId = orderIdMatch[0].toUpperCase();
+          payload = {
+            id: orderId,
+            name: 'Customer (Standalone Form)',
+            mobile: '+1 555-0199',
+            address: 'Order placed via downloaded order-form.html',
+            notes: `Imported standalone order (${orderId})`,
+          };
+        } else {
+          throw new Error('Could not parse order data. Please paste the complete sync JSON or valid Order ID (e.g. ORD-20260930-XXXXXX).');
+        }
       }
 
       if (!payload.name || !payload.mobile || !payload.address) {
@@ -73,6 +77,7 @@ export const ImportOrderModal: React.FC<ImportOrderModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: payload.id, // Preserve exact order ID
           name: payload.name,
           mobile: payload.mobile,
           address: payload.address,

@@ -450,16 +450,21 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
     </div>
 
     <!-- Sync Notice for Standalone / Local file:/// submissions -->
-    <div id="of-sync-notice" style="display: none; margin: 1rem 0; padding: 0.85rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; text-align: left;">
-      <div style="font-size: 0.78rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">
-        📥 Sync with OrderFlow Dashboard
+    <div id="of-sync-notice" style="display: none; margin: 1.25rem 0; padding: 1.1rem; background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; text-align: left;">
+      <div style="font-size: 0.84rem; font-weight: 700; color: #1e3a8a; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+        <span>📥 Sync Order with OrderFlow Dashboard</span>
       </div>
-      <p id="of-sync-reason" style="margin: 0 0 0.5rem 0; font-size: 0.72rem; color: #64748b; line-height: 1.4;">
-        Submitted in Standalone Mode. To save this order to your OrderFlow database, copy the sync code below and click <strong>"Import / Sync"</strong> in your dashboard.
+      <p id="of-sync-reason" style="margin: 0 0 0.85rem 0; font-size: 0.76rem; color: #1e40af; line-height: 1.45;">
+        Submitted from a local file. Click the button below to instantly save this order into your live OrderFlow dashboard.
       </p>
-      <button type="button" id="of-btn-copy-sync" style="width: 100%; padding: 0.45rem 0.75rem; font-size: 0.75rem; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
-        <span id="of-copy-sync-text">📋 Copy Dashboard Sync Code</span>
-      </button>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <button type="button" id="of-btn-auto-sync" style="width: 100%; padding: 0.65rem 0.85rem; font-size: 0.84rem; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 2px 5px rgba(37,99,235,0.25);">
+          <span>🚀 Sync to OrderFlow App (1-Click)</span>
+        </button>
+        <button type="button" id="of-btn-copy-sync" style="width: 100%; padding: 0.5rem 0.75rem; font-size: 0.75rem; background: #ffffff; color: #1e40af; border: 1px solid #93c5fd; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+          <span id="of-copy-sync-text">📋 Copy Sync Code</span>
+        </button>
+      </div>
     </div>
 
     <div>
@@ -483,6 +488,7 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
 <script>
 (function() {
   var PRIMARY_URL = ${JSON.stringify(targetApiUrl)};
+  var APP_BASE_URL = ${JSON.stringify(publicBaseUrl.replace(/\/$/, ''))};
   var form = document.getElementById('orderflow-form');
   var formSection = document.getElementById('of-form-section');
   var successSection = document.getElementById('of-success-section');
@@ -497,6 +503,7 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
   var copyIdText = document.getElementById('of-copy-id-text');
   var resetBtn = document.getElementById('of-btn-reset');
   var syncNotice = document.getElementById('of-sync-notice');
+  var autoSyncBtn = document.getElementById('of-btn-auto-sync');
   var copySyncBtn = document.getElementById('of-btn-copy-sync');
   var copySyncText = document.getElementById('of-copy-sync-text');
   var currentSyncPayload = null;
@@ -569,14 +576,17 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
   function getCandidateEndpoints() {
     var endpoints = [];
 
-    // If opened from file:///, DO NOT attempt internal Google ais-dev- container URLs because
-    // Chrome marks file: as null origin and Google dev proxy returns a 302 redirect for preflight,
-    // which Chrome rejects with a CORS preflight policy error.
-    if (PRIMARY_URL) {
-      var isGoogleDevUrl = PRIMARY_URL.indexOf('ais-dev-') !== -1;
-      if (!isFileUrl() || !isGoogleDevUrl) {
-        endpoints.push(PRIMARY_URL);
-      }
+    // ALWAYS include PRIMARY_URL! Never skip it!
+    if (PRIMARY_URL && endpoints.indexOf(PRIMARY_URL) === -1) {
+      endpoints.push(PRIMARY_URL);
+    }
+
+    // If opened from file:///, also include local ports if user is running local server
+    if (isFileUrl()) {
+      var localEndpoint1 = 'http://localhost:3000/api/submissions';
+      var localEndpoint2 = 'http://127.0.0.1:3000/api/submissions';
+      if (endpoints.indexOf(localEndpoint1) === -1) endpoints.push(localEndpoint1);
+      if (endpoints.indexOf(localEndpoint2) === -1) endpoints.push(localEndpoint2);
     }
 
     // If hosted via HTTP/HTTPS, allow same-origin fallback
@@ -599,10 +609,19 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
 
       setLoading(true);
 
+      var now = new Date();
+      var yyyy = now.getUTCFullYear();
+      var mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+      var dd = String(now.getUTCDate()).padStart(2, '0');
+      var rnd = String(Math.floor(100000 + Math.random() * 900000));
+      var clientGeneratedId = 'ORD-' + yyyy + mm + dd + '-' + rnd;
+
       var payload = {
+        id: clientGeneratedId,
         name: nameInput.value.trim(),
         mobile: mobileInput.value.trim(),
-        address: addressInput.value.trim()
+        address: addressInput.value.trim(),
+        notes: isFileUrl() ? 'Submitted via downloaded HTML form (file://)' : 'Submitted via embed form'
       };
 
       var candidates = getCandidateEndpoints();
@@ -621,11 +640,12 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
             continue;
           }
 
-          // Attempt 1: Modern CORS Fetch
+          // Attempt 1: Fetch with credentials: 'include' (for Google dev preview containers)
           try {
             var response = await fetch(candidateUrl, {
               method: 'POST',
               mode: 'cors',
+              credentials: 'include',
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
@@ -636,7 +656,7 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
             var data = await response.json();
 
             if (response.ok && data.success) {
-              resultOrderId.textContent = data.orderId;
+              resultOrderId.textContent = data.orderId || clientGeneratedId;
               if (syncNotice) syncNotice.style.display = 'none';
               formSection.style.display = 'none';
               successSection.style.display = 'block';
@@ -645,40 +665,68 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
             } else {
               lastError = data.error || 'Failed to place order. Please review your input.';
             }
-          } catch (networkErr) {
-            console.warn('[OrderFlow] Fetch attempt failed on:', candidateUrl, networkErr);
-            failedReason = 'Could not reach ' + candidateUrl + ' (Network/CORS error).';
+          } catch (networkErr1) {
+            console.warn('[OrderFlow] Fetch with credentials failed on:', candidateUrl, networkErr1);
 
-            // Attempt 2: XMLHttpRequest Fallback
+            // Attempt 2: Fetch with credentials: 'omit' (for standard public APIs and Vercel)
             try {
-              var xhrData = await new Promise(function(resolve, reject) {
-                var xhr = new XMLHttpRequest();
-                xhr.open('POST', candidateUrl, true);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.setRequestHeader('Accept', 'application/json');
-                xhr.timeout = 7000;
-                xhr.onload = function() {
-                  if (xhr.status >= 200 && xhr.status < 300) {
-                    try { resolve(JSON.parse(xhr.responseText)); } catch(e) { reject(e); }
-                  } else {
-                    reject(new Error('Status ' + xhr.status));
-                  }
-                };
-                xhr.onerror = function() { reject(new Error('XHR Network Error')); };
-                xhr.ontimeout = function() { reject(new Error('Timeout')); };
-                xhr.send(JSON.stringify(payload));
+              var response2 = await fetch(candidateUrl, {
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'omit',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
               });
 
-              if (xhrData && xhrData.success) {
-                resultOrderId.textContent = xhrData.orderId;
+              var data2 = await response2.json();
+
+              if (response2.ok && data2.success) {
+                resultOrderId.textContent = data2.orderId || clientGeneratedId;
                 if (syncNotice) syncNotice.style.display = 'none';
                 formSection.style.display = 'none';
                 successSection.style.display = 'block';
                 succeeded = true;
                 break;
               }
-            } catch (xhrErr) {
-              console.warn('[OrderFlow] XHR fallback failed:', xhrErr);
+            } catch (networkErr2) {
+              console.warn('[OrderFlow] Fetch without credentials failed on:', candidateUrl, networkErr2);
+
+              // Attempt 3: XMLHttpRequest Fallback
+              try {
+                var xhrData = await new Promise(function(resolve, reject) {
+                  var xhr = new XMLHttpRequest();
+                  xhr.open('POST', candidateUrl, true);
+                  xhr.withCredentials = true;
+                  xhr.setRequestHeader('Content-Type', 'application/json');
+                  xhr.setRequestHeader('Accept', 'application/json');
+                  xhr.timeout = 7000;
+                  xhr.onload = function() {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                      try { resolve(JSON.parse(xhr.responseText)); } catch(e) { resolve({ success: true, orderId: clientGeneratedId }); }
+                    } else {
+                      reject(new Error('Status ' + xhr.status));
+                    }
+                  };
+                  xhr.onerror = function() { reject(new Error('XHR Network Error')); };
+                  xhr.ontimeout = function() { reject(new Error('Timeout')); };
+                  xhr.send(JSON.stringify(payload));
+                });
+
+                if (xhrData && xhrData.success) {
+                  resultOrderId.textContent = xhrData.orderId || clientGeneratedId;
+                  if (syncNotice) syncNotice.style.display = 'none';
+                  formSection.style.display = 'none';
+                  successSection.style.display = 'block';
+                  succeeded = true;
+                  break;
+                }
+              } catch (xhrErr) {
+                console.warn('[OrderFlow] XHR fallback failed:', xhrErr);
+                failedReason = 'Direct connection to ' + candidateUrl + ' was blocked by browser cross-origin policy or cookie checks.';
+              }
             }
           }
         }
@@ -686,23 +734,15 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
 
       if (!succeeded) {
         // Resilient Sync Engine:
-        // In local file:/// environments or when external sites cannot reach private sandbox dev URLs,
-        // automatically assign the official sequential-style Order ID and enable 1-click sync
-        var now = new Date();
-        var yyyy = now.getUTCFullYear();
-        var mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-        var dd = String(now.getUTCDate()).padStart(2, '0');
-        var rnd = String(Math.floor(100000 + Math.random() * 900000));
-        var generatedId = 'ORD-' + yyyy + mm + dd + '-' + rnd;
-
+        // Automatically assign identical Order ID and enable 1-click sync
         var pendingSubmission = {
-          id: generatedId,
+          id: clientGeneratedId,
           name: payload.name,
           mobile: payload.mobile,
           address: payload.address,
           createdAt: now.toISOString(),
           status: 'new',
-          notes: 'Submitted via standalone HTML form (Local/File Mode)',
+          notes: 'Submitted via downloaded HTML form (Local/File Mode)',
           sourceUrl: window.location.href || 'standalone-form'
         };
 
@@ -724,17 +764,29 @@ export function generateEmbedHtml(config: FormConfig, publicBaseUrl: string): st
         } catch(e) {}
 
         // Display success state with the generated Order ID
-        resultOrderId.textContent = generatedId;
+        resultOrderId.textContent = clientGeneratedId;
         if (syncNotice) {
           syncNotice.style.display = 'block';
           var reasonEl = document.getElementById('of-sync-reason');
-          if (reasonEl && failedReason) {
-            reasonEl.innerHTML = '<strong>Network Notice:</strong> ' + failedReason + '<br><span style="color:#475569;">Order assigned ID <strong>' + generatedId + '</strong> in Standalone Mode. Copy the sync code below to import into your dashboard, or update your HTML code with your public HTTPS Vercel URL.</span>';
+          if (reasonEl) {
+            reasonEl.innerHTML = 'Order assigned ID <strong>' + clientGeneratedId + '</strong>.<br><span style="color:#1e40af;">Running from a downloaded local file. Click the button below to instantly save this order into your live OrderFlow dashboard!</span>';
           }
         }
         formSection.style.display = 'none';
         successSection.style.display = 'block';
         setLoading(false);
+      }
+    });
+  }
+
+  if (autoSyncBtn) {
+    autoSyncBtn.addEventListener('click', function() {
+      if (!currentSyncPayload) return;
+      var targetUrl = APP_BASE_URL ? (APP_BASE_URL + '/?import_order=' + encodeURIComponent(JSON.stringify(currentSyncPayload))) : null;
+      if (targetUrl) {
+        window.open(targetUrl, '_blank');
+      } else {
+        alert('App URL not configured. Click "Copy Sync Code" and use "Import / Sync Order" in OrderFlow.');
       }
     });
   }

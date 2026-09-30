@@ -126,6 +126,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            id: ord.id,
             name: ord.name,
             mobile: ord.mobile,
             address: ord.address,
@@ -139,6 +140,42 @@ export default function App() {
       fetchStats();
     } catch (e) {
       console.warn('Sync pending offline orders error:', e);
+    }
+  }, [fetchSubmissions, fetchStats]);
+
+  // Check URL query params for 1-click import from downloaded HTML forms
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const importOrderParam = urlParams.get('import_order');
+    if (importOrderParam) {
+      try {
+        const orderData = JSON.parse(importOrderParam);
+        if (orderData && orderData.name && orderData.mobile && orderData.address) {
+          fetch('/api/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: orderData.id,
+              name: orderData.name,
+              mobile: orderData.mobile,
+              address: orderData.address,
+              notes: orderData.notes || 'Synced from downloaded HTML form',
+            }),
+          }).then((res) => {
+            if (res.ok) {
+              fetchSubmissions(true);
+              fetchStats();
+              setActiveTab('submissions');
+              // Clean the URL without reloading
+              const cleanUrl = window.location.pathname;
+              window.history.replaceState({}, '', cleanUrl);
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to auto-import order from URL param:', e);
+      }
     }
   }, [fetchSubmissions, fetchStats]);
 
@@ -163,6 +200,7 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              id: ord.id,
               name: ord.name,
               mobile: ord.mobile,
               address: ord.address,
